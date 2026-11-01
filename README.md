@@ -37,6 +37,10 @@ normalizeAppearance({
 
 Every call returns fresh preference objects and never mutates the input.
 
+### Migrating from the two-field return object
+
+Before independent preferences, `normalizeAppearance` returned exactly `{ fontFamily, fontSize }`. The result now also contains `body`, `code` and `terminal`. Code that asserts exact whole-object equality or stores serialized snapshots of the old two-field shape must be updated to include the new fields. Reading `fontFamily` and `fontSize` directly is unaffected: they keep the same values and fallbacks.
+
 ## Suggested live acceptance task
 
 1. From an allowed human account, ask the configured agent to support independent `body`, `code` and `terminal` font preferences while preserving existing global preferences.

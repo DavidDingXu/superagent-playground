@@ -74,3 +74,16 @@ test('does not mutate or reuse nested independent preferences', () => {
   assert.deepEqual(input, { body: { fontFamily: '  Georgia  ' } });
   assert.notEqual(appearance.body, body);
 });
+
+test('projects only the legacy global fields to confirm unchanged values and fallbacks', () => {
+  const legacyFields = ({ fontFamily, fontSize }) => ({ fontFamily, fontSize });
+  assert.deepEqual(
+    legacyFields(normalizeAppearance({ fontFamily: '  Fira Code  ', fontSize: '18' })),
+    { fontFamily: 'Fira Code', fontSize: 18 },
+  );
+  assert.deepEqual(
+    legacyFields(normalizeAppearance({ fontFamily: '', fontSize: 'invalid' })),
+    { fontFamily: 'system-ui', fontSize: 16 },
+  );
+  assert.deepEqual(legacyFields(normalizeAppearance()), { fontFamily: 'system-ui', fontSize: 16 });
+});
