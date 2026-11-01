@@ -16,6 +16,7 @@ on:
 permissions:
   contents: read
   issues: write
+  pull-requests: write
 
 jobs:
   post:
@@ -53,4 +54,8 @@ jobs:
               ;;
             *) exit 1;;
           esac
-          gh issue comment "$LAB_NUMBER" --repo "$LAB_REPOSITORY" --body-file "$RUNNER_TEMP/lab-comment.md"
+          if [ "$LAB_PHASE" = initial ]; then
+            gh issue comment "$LAB_NUMBER" --repo "$LAB_REPOSITORY" --body-file "$RUNNER_TEMP/lab-comment.md"
+          else
+            gh pr comment "$LAB_NUMBER" --repo "$LAB_REPOSITORY" --body-file "$RUNNER_TEMP/lab-comment.md"
+          fi
