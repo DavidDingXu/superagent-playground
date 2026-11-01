@@ -1,0 +1,50 @@
+name: Controlled lab event
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Issue or PR number in this test repository
+        required: true
+        type: number
+      phase:
+        description: Controlled acceptance event
+        required: true
+        type: choice
+        options: [initial, review]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LAB_REPOSITORY: ${{ github.repository }}
+      LAB_NUMBER: ${{ inputs.target }}
+      LAB_PHASE: ${{ inputs.phase }}
+    steps:
+      - name: Post one predefined test event
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$LAB_NUMBER" in ''|*[!0-9]*) exit 1;; esac
+          case "$LAB_PHASE" in
+            initial)
+              cat > "$RUNNER_TEMP/lab-comment.md" <<'BODY'
+          @DavidDingXu [SUPERAGENT-LIVE-TEST]
+          This is an operator-authorized, one-time acceptance task in this private fixture repository.
+          Extend normalizeAppearance to support independent body, code and terminal fontFamily preferences. Preserve the existing global fontFamily/fontSize interface and fallback behavior. Include focused regression tests and update the README. Work only in this repository, run npm test, and open one draft pull request for review. Do not merge, close issues, add dependencies or change GitHub workflows.
+          BODY
+              ;;
+            review)
+              cat > "$RUNNER_TEMP/lab-comment.md" <<'BODY'
+          @DavidDingXu [SUPERAGENT-LIVE-TEST-REVIEW]
+          Controlled review follow-up for the existing task and PR: add a README code example for the three font preferences, and a test showing that changing the returned body preference does not mutate code or terminal preferences. Continue on this same PR; do not open another PR or merge.
+          BODY
+              ;;
+            *) exit 1;;
+          esac
+          gh issue comment "$LAB_NUMBER" --repo "$LAB_REPOSITORY" --body-file "$RUNNER_TEMP/lab-comment.md"
