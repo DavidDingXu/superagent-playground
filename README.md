@@ -10,6 +10,8 @@ npm test
 
 Node.js 24+ is required. GitHub Actions runs the same tests on Linux, macOS and Windows.
 
+The `main` branch retains the starting fixture. [PR #2](https://github.com/DavidDingXu/superagent-playground/pull/2) records the real model-generated font change and its same-PR review follow-up. See the [reproduction guide](docs/REPRODUCE.md) for the exact scope, the controlled event workflow and the upstream companion patch. A ready draft is not a merged or production-validated result.
+
 ## Suggested live acceptance task
 
 1. From an allowed human account, ask the configured agent to support independent `body`, `code` and `terminal` font preferences while preserving existing global preferences.

@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      LAB_AGENT_LOGIN: ${{ vars.SUPERAGENT_AGENT_LOGIN || github.repository_owner }}
       LAB_REPOSITORY: ${{ github.repository }}
       LAB_NUMBER: ${{ inputs.target }}
       LAB_PHASE: ${{ inputs.phase }}
@@ -31,31 +32,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$LAB_AGENT_LOGIN" =~ ^[A-Za-z0-9-]+$ ]]
           case "$LAB_NUMBER" in ''|*[!0-9]*) exit 1;; esac
           case "$LAB_PHASE" in
             initial)
               cat > "$RUNNER_TEMP/lab-comment.md" <<'BODY'
-          @DavidDingXu [SUPERAGENT-LIVE-TEST]
+          [SUPERAGENT-LIVE-TEST]
           This is an operator-authorized, one-time acceptance task in this private fixture repository.
           Extend normalizeAppearance to support independent body, code and terminal fontFamily preferences. Preserve the existing global fontFamily/fontSize interface and fallback behavior. Include focused regression tests and update the README. Work only in this repository, run npm test, and open one draft pull request for review. Do not merge, close issues, add dependencies or change GitHub workflows.
           BODY
               ;;
             review)
               cat > "$RUNNER_TEMP/lab-comment.md" <<'BODY'
-          @DavidDingXu [SUPERAGENT-LIVE-TEST-REVIEW]
+          [SUPERAGENT-LIVE-TEST-REVIEW]
           Controlled review follow-up for the existing task and PR: add a README code example for the three font preferences, and a test showing that changing the returned body preference does not mutate code or terminal preferences. Continue on this same PR; do not open another PR or merge.
           BODY
               ;;
             compatibility)
               cat > "$RUNNER_TEMP/lab-comment.md" <<'BODY'
-          @DavidDingXu [SUPERAGENT-LIVE-TEST-REVIEW]
+          [SUPERAGENT-LIVE-TEST-REVIEW]
           Controlled compatibility review for this same task/PR: the new return object always adds body/code/terminal fields. Add a migration note explicitly saying that exact whole-object equality or serialized snapshots of the old two-field return shape must be updated, while reading the two global fields keeps its values. Add a focused regression test that projects only the legacy fontFamily/fontSize fields and confirms the original values/fallbacks. This is documentation/testing of the existing font feature, not a new feature. Update this same PR; do not create another PR or merge.
           BODY
               ;;
             *) exit 1;;
           esac
+          printf '@%s\n' "$LAB_AGENT_LOGIN" > "$RUNNER_TEMP/addressed-comment.md"
+          cat "$RUNNER_TEMP/lab-comment.md" >> "$RUNNER_TEMP/addressed-comment.md"
           if [ "$LAB_PHASE" = initial ]; then
-            gh issue comment "$LAB_NUMBER" --repo "$LAB_REPOSITORY" --body-file "$RUNNER_TEMP/lab-comment.md"
+            gh issue comment "$LAB_NUMBER" --repo "$LAB_REPOSITORY" --body-file "$RUNNER_TEMP/addressed-comment.md"
           else
-            gh pr comment "$LAB_NUMBER" --repo "$LAB_REPOSITORY" --body-file "$RUNNER_TEMP/lab-comment.md"
+            gh pr comment "$LAB_NUMBER" --repo "$LAB_REPOSITORY" --body-file "$RUNNER_TEMP/addressed-comment.md"
           fi
