@@ -11,7 +11,7 @@ on:
         description: Controlled acceptance event
         required: true
         type: choice
-        options: [initial, review]
+        options: [initial, review, compatibility]
 
 permissions:
   contents: read
@@ -43,6 +43,12 @@ jobs:
               cat > "$RUNNER_TEMP/lab-comment.md" <<'BODY'
           @DavidDingXu [SUPERAGENT-LIVE-TEST-REVIEW]
           Controlled review follow-up for the existing task and PR: add a README code example for the three font preferences, and a test showing that changing the returned body preference does not mutate code or terminal preferences. Continue on this same PR; do not open another PR or merge.
+          BODY
+              ;;
+            compatibility)
+              cat > "$RUNNER_TEMP/lab-comment.md" <<'BODY'
+          @DavidDingXu [SUPERAGENT-LIVE-TEST-REVIEW]
+          Controlled compatibility review for this same task/PR: the new return object always adds body/code/terminal fields. Add a migration note explicitly saying that exact whole-object equality or serialized snapshots of the old two-field return shape must be updated, while reading the two global fields keeps its values. Add a focused regression test that projects only the legacy fontFamily/fontSize fields and confirms the original values/fallbacks. This is documentation/testing of the existing font feature, not a new feature. Update this same PR; do not create another PR or merge.
           BODY
               ;;
             *) exit 1;;
