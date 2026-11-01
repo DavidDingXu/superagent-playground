@@ -1,0 +1,2 @@
+# Unified-diff context markers include a required space on otherwise blank lines.
+docs/upstream-companion.patch -whitespace

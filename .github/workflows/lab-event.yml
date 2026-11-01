@@ -38,7 +38,7 @@ jobs:
             initial)
               cat > "$RUNNER_TEMP/lab-comment.md" <<'BODY'
           [SUPERAGENT-LIVE-TEST]
-          This is an operator-authorized, one-time acceptance task in this private fixture repository.
+          This is an operator-authorized, one-time acceptance task in this disposable test repository.
           Extend normalizeAppearance to support independent body, code and terminal fontFamily preferences. Preserve the existing global fontFamily/fontSize interface and fallback behavior. Include focused regression tests and update the README. Work only in this repository, run npm test, and open one draft pull request for review. Do not merge, close issues, add dependencies or change GitHub workflows.
           BODY
               ;;
