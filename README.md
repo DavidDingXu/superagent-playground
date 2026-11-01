@@ -2,13 +2,44 @@
 
 A disposable repository for validating coding-agent requests, pull requests, review follow-ups and CI. This is a test fixture, not a Super-agent implementation or an official DeepSeek product.
 
-The initial fixture normalizes one global font preference. It has no dependencies, credentials, network calls or background jobs.
+The fixture normalizes global font preferences and independent `body`, `code` and `terminal` font families. It has no dependencies, credentials, network calls or background jobs.
 
 ```sh
 npm test
 ```
 
 Node.js 24+ is required. GitHub Actions runs the same tests on Linux, macOS and Windows.
+
+## Appearance preferences
+
+`normalizeAppearance(input)` accepts the existing global `fontFamily` and `fontSize` fields. `fontFamily` falls back to `system-ui` when it is missing, blank or not a string. `fontSize` is rounded and clamped to 8–40, falling back to 16.
+
+Each of `body`, `code` and `terminal` may override the font family independently through a `{ fontFamily }` object. An override that is missing, blank or not a string falls back to the normalized global `fontFamily`. These fields are additive, so callers that only pass the global fields keep the previous global font and fallback behavior.
+
+```js
+import { normalizeAppearance } from './src/appearance.js';
+
+normalizeAppearance({
+  fontFamily: 'system-ui',
+  fontSize: 16,
+  body: { fontFamily: 'Charter' },
+  code: { fontFamily: 'Fira Code' },
+  terminal: { fontFamily: 'Menlo' },
+});
+// {
+//   fontFamily: 'system-ui',
+//   fontSize: 16,
+//   body: { fontFamily: 'Charter' },
+//   code: { fontFamily: 'Fira Code' },
+//   terminal: { fontFamily: 'Menlo' },
+// }
+```
+
+Every call returns fresh preference objects and never mutates the input.
+
+### Migrating from the two-field return object
+
+Before independent preferences, `normalizeAppearance` returned exactly `{ fontFamily, fontSize }`. The result now also contains `body`, `code` and `terminal`. Code that asserts exact whole-object equality or stores serialized snapshots of the old two-field shape must be updated to include the new fields. Reading `fontFamily` and `fontSize` directly is unaffected: they keep the same values and fallbacks.
 
 ## Suggested live acceptance task
 
