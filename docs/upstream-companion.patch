@@ -1,5 +1,5 @@
 diff --git a/README.md b/README.md
-index 39e1c4a..09e4ceb 100644
+index 39e1c4a..42e0028 100644
 --- a/README.md
 +++ b/README.md
 @@ -34,6 +34,10 @@ Read the numbered documents in order; each builds only on the ones before it.
@@ -8,7 +8,7 @@ index 39e1c4a..09e4ceb 100644
  
 +### Local validation companion
 +
-+This checkout includes a [credential-free local replay and validation record](docs/local-validation.md), plus a separate [reliable-execution proposal](docs/reliability-proposal.md) and [architecture diagram](docs/reliability-architecture.html). The proposal is not implemented or benchmarked. Live model, GitHub and Feishu integration remain a separate acceptance step.
++This checkout includes a [credential-free replay and bounded live GitHub validation record](docs/local-validation.md), plus a separate [reliable-execution proposal](docs/reliability-proposal.md) and [architecture diagram](docs/reliability-architecture.html). The proposal is not implemented or benchmarked. Live Feishu, merging and host-interruption acceptance remain untested.
 +
  ## License
  
