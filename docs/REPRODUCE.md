@@ -13,7 +13,7 @@ This is an educational test fixture for the official [dsh-superagent-prototype](
 7. The final head `140491003f542db4dd5eed9c80d92bf88f47ad8b` passed 8 local tests and CI on Linux, macOS and Windows. A separate read-only review checked the three changed files.
 8. The PR remained draft/open, and the agent's task processing was paused again.
 
-No live Feishu conversation, merge, live process crash, cross-device daemon or fault-recovery benchmark was tested. A separate local replay uses the real Engine/SQLite with scripted model and service boundaries; its results must not be described as live platform behavior.
+No live Feishu conversation, merge, full Harness-host crash, cross-device daemon or fault-recovery benchmark was tested. Separate local experiments cover Engine/SQLite replay and a real sender-process kill with simulated remote transport; their results must not be described as live platform behavior.
 
 The fixture was private while this experiment ran. It was prepared for public release after reviewing the code, issue/PR content and tracked files for credentials and personal paths.
 
@@ -68,9 +68,11 @@ Check workflow completion and the actual GitHub comment before attributing any r
 
 The optional `review` workflow phase asks for an example/non-mutation check that a model may already have produced. An accurate no-op is valid; use `compatibility` for the more specific, observed follow-up.
 
+The [selected operational trace](evidence/review-followup.json) records a useful detail: subscription delivery reached the Worker at 04:16:08.793 UTC, it read the trigger at 04:16:11.244, and the Router attached the same event with a note at 04:16:21.572. This was an automatic Router tool call, not operator forwarding. Event deduplication and additional routing notes are distinct; this one trace does not establish a throughput result or show that all later assessment can be removed.
+
 ## Upstream companion patch
 
-[`upstream-companion.patch`](upstream-companion.patch) contains the local Git-language test fix, a credential-free Engine/SQLite replay, reproduction notes, and an **unimplemented** reliable-publication design. It does not replace the upstream engine.
+[`upstream-companion.patch`](upstream-companion.patch) contains the local Git-language test fix, a credential-free Engine/SQLite replay, a sender-process crash experiment, reproduction notes, and an **unimplemented** reliable-publication design. It does not replace the upstream engine.
 
 Apply it to the fixed upstream commit:
 
@@ -83,6 +85,26 @@ pnpm install --frozen-lockfile --ignore-scripts
 pnpm check
 ```
 
-The patched upstream passed typechecking, build and 1198 tests on macOS. The patch was checked against a clean copy of the pinned source. Its architecture proposal has not been implemented or compared with upstream; it is not evidence of superior quality, cost or latency.
+The patched upstream passed typechecking, build and 1201 tests in 61 files on macOS. The patch was checked against a clean copy of the pinned source. Its architecture proposal has not been implemented or compared with upstream; it is not evidence of superior quality, cost or latency.
+
+## Reproduce the sender crash window
+
+After applying the patch, run:
+
+```sh
+pnpm exec vitest run tests/outbox-crash.spec.ts
+```
+
+The real child runs upstream Store/Effects/Outbox/SourceRegistry and the GitHub reply adapter. The CLI transport talks only to a loopback probe. Kill occurs after the probe has saved a comment, before the local receipt settles; the test asserts the requested kill and actual exit signal on POSIX, then starts a new process against the same SQLite file.
+
+| Same crash point, different sender condition | Total simulated remote POSTs |
+| --- | --- |
+| Upstream GitHub adapter, stable marker still visible | 1 |
+| Same durable queue, deliberately naive sender | 2 |
+| Upstream adapter, only the hidden marker removed before restart | 2 |
+
+Each case ends with a persisted sent receipt and no pending reply effect. This verifies the adapter's existing reconciliation and its assumptions; it does not add that mechanism. The probe's reads are immediately consistent, and its comment state survives in the independent parent process. Real GitHub failures, concurrent senders, visibility delays, Worker-issued Git/PR writes and full Harness-host recovery remain outside this experiment.
+
+[The observed crash report](evidence/outbox-crash.json) retains the termination signals and operation counts. The test and fixture are in the companion patch.
 
 Upstream attribution and MIT licensing remain intact. The diagram template's attribution and MIT notice are embedded in its HTML.

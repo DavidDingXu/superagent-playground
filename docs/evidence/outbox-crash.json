@@ -1,0 +1,59 @@
+{
+  "upstream": "6337fc823ce20251c8de8085948165c81aaa701e",
+  "real": [
+    "child-process termination",
+    "SQLite",
+    "Effects",
+    "Outbox",
+    "GitHub channel adapter"
+  ],
+  "simulated": [
+    "GitHub CLI transport and remote service"
+  ],
+  "modelCalls": 0,
+  "externalPlatformWrites": 0,
+  "cases": [
+    {
+      "sender": "github",
+      "markerRemoved": false,
+      "receiptBeforeRestart": "pending",
+      "effectBeforeRestart": true,
+      "termination": {
+        "code": null,
+        "signal": "SIGKILL"
+      },
+      "remoteWrites": 1,
+      "remoteReads": 2,
+      "statusAfterRestart": "sent",
+      "effectAfterRestart": false
+    },
+    {
+      "sender": "naive",
+      "markerRemoved": false,
+      "receiptBeforeRestart": "pending",
+      "effectBeforeRestart": true,
+      "termination": {
+        "code": null,
+        "signal": "SIGKILL"
+      },
+      "remoteWrites": 2,
+      "remoteReads": 0,
+      "statusAfterRestart": "sent",
+      "effectAfterRestart": false
+    },
+    {
+      "sender": "github",
+      "markerRemoved": true,
+      "receiptBeforeRestart": "pending",
+      "effectBeforeRestart": true,
+      "termination": {
+        "code": null,
+        "signal": "SIGKILL"
+      },
+      "remoteWrites": 2,
+      "remoteReads": 2,
+      "statusAfterRestart": "sent",
+      "effectAfterRestart": false
+    }
+  ]
+}

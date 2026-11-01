@@ -14,10 +14,18 @@ index 39e1c4a..42e0028 100644
  
  [MIT](LICENSE)
 diff --git a/docs/007-architecture.md b/docs/007-architecture.md
-index 184ea54..96ab914 100644
+index 184ea54..247a73c 100644
 --- a/docs/007-architecture.md
 +++ b/docs/007-architecture.md
-@@ -426,6 +426,7 @@ Some generic modules still refer directly to GitHub or Feishu:
+@@ -417,6 +417,7 @@ Some generic modules still refer directly to GitHub or Feishu:
+ | `tests/effects.spec.ts` | The effect queue: coalescing, limits, retries with backoff, health and shutdown |
+ | `tests/passes.spec.ts` | Passes: one at a time, the ones asked for during a pass run as one after it, and the runtime health a failed pass reports |
+ | `tests/outbox.spec.ts` | The Outbox on a running Runtime: messages wait while processing is paused or their Source is not installed |
++| `tests/outbox-crash.spec.ts` | Real child-process termination after a simulated remote comment commit and before the local receipt settles: GitHub marker reconciliation, a non-idempotent control and marker removal; remote CLI transport is a loopback probe |
+ | `tests/cache.spec.ts` | `TextCache` |
+ | `tests/queue.spec.ts` | The Runtime's work through the effect queue, and what earlier versions stored |
+ | `tests/followups.spec.ts` | A person's follow-up on a Ticket's Thread: its notice to the main Session, the tools that act on it, what a burst costs; a worker's hand-back and context follow, and the main Session's note |
+@@ -426,6 +427,7 @@ Some generic modules still refer directly to GitHub or Feishu:
  | `tests/runtime.spec.ts` | The whole application on a simulated DeepSeek Harness host, through tools and HTTP |
  | `tests/tools.spec.ts` | The Sessions' tools: what `orchestrator_read` reads for each role, and the shapes and checks of the other main Session tools |
  | `tests/runtime-concurrency.spec.ts` | Work that overlaps: Triggers during a pass, Tickets that change during deliveries and launches |
@@ -27,10 +35,10 @@ index 184ea54..96ab914 100644
  | `tests/views.spec.ts` | What the management views derive from the Store, such as the Thread a dropped message belongs to |
 diff --git a/docs/local-validation.md b/docs/local-validation.md
 new file mode 100644
-index 0000000..cde8da5
+index 0000000..068ab00
 --- /dev/null
 +++ b/docs/local-validation.md
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,137 @@
 +# Local validation notes
 +
 +This is a local companion to the upstream research prototype, not upstream product documentation. It records a reproducible, credential-free check and the remaining live integration requirements.
@@ -80,6 +88,28 @@ index 0000000..cde8da5
 +```
 +
 +The replay is intended to be portable; Windows has not been executed here. The upstream service manager itself imports Python `fcntl` and uses `tmux` and POSIX shell commands. Do not infer native Windows service support from the existence of PowerShell worker tools. Use an appropriate Linux/WSL environment if following the upstream deployment scripts; that path is not validated by this local run.
++
++## Crash after the remote commit, before the local receipt
++
++`tests/outbox-crash.spec.ts` runs the upstream `Store`, `Effects`, `Outbox`, `SourceRegistry` and `sendGithub` in a real child process. Only `Commands.run` is replaced with a loopback HTTP probe that simulates GitHub's paginated comment read and comment POST. The parent process owns the remote comment list, so it survives the child being killed. No model or external platform is called.
++
++The child signals a checkpoint after the probe has saved the comment but before the sender returns to `Outbox` to settle the local receipt. The parent asserts that the child is still alive, requests `SIGKILL`, waits for `close`, and checks the actual termination signal on POSIX. It then independently reopens SQLite: the receipt and effect must still be pending. A new child resumes the same database and operation ID.
++
++```sh
++mkdir -p .artifacts
++SUPERAGENT_CRASH_REPORT=.artifacts/outbox-crash-report.json \
++  pnpm exec vitest run tests/outbox-crash.spec.ts
++```
++
++| Sender at the same crash point | Remote POSTs after recovery |
++| --- | --- |
++| Upstream GitHub adapter; operation marker remains visible | 1 |
++| Deliberately naive sender with the same upstream durable queue | 2 |
++| Upstream GitHub adapter; only its hidden marker removed before recovery | 2 |
++
++All three cases finish with a persisted `sent` receipt and no pending reply effect. The first case performs two remote reads and one POST: recovery queries the marker instead of posting again. These are observations under the probe's immediately consistent reads, not a general exactly-once guarantee. The experiment does not cover real GitHub failures, concurrent senders, visibility delays, a full Harness host crash or Worker-issued Git/PR effects. The actual marker reconciliation and Feishu idempotency key already exist upstream; this experiment exercises their assumptions rather than adding them.
++
++With both companion experiments, the complete `pnpm check` passed typechecking, build, and 1201 tests in 61 files on macOS. The fixture's three-platform CI covers its eight business tests, not this upstream process experiment.
 +
 +## Start an isolated local panel
 +
@@ -141,6 +171,7 @@ index 0000000..cde8da5
 +
 +- `tests/environment.spec.ts`: deterministic language for the diagnostic being asserted.
 +- `tests/cross-channel-replay.spec.ts`: a credential-free integration replay for readers.
++- `tests/outbox-crash.spec.ts` and its fixture: a real process-death experiment with simulated remote transport.
 +- `docs/local-validation.md`: this record and the live acceptance boundary.
 +- `docs/reliability-proposal.md`: an unimplemented extension design, separate from verified upstream behavior.
 +
@@ -2520,10 +2551,10 @@ HcmV?d00001
 
 diff --git a/docs/reliability-proposal.md b/docs/reliability-proposal.md
 new file mode 100644
-index 0000000..7d1fb5d
+index 0000000..bcc1f9f
 --- /dev/null
 +++ b/docs/reliability-proposal.md
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,136 @@
 +# Reliable execution across channels: an extension proposal
 +
 +**Status: design proposal, not implemented or benchmarked.** This document is a local exploration based on upstream commit `6337fc823ce20251c8de8085948165c81aaa701e`. It neither replaces the upstream architecture nor establishes that a new system is generally better.
@@ -2546,6 +2577,7 @@ index 0000000..7d1fb5d
 +| Stable trigger identities, subscriptions and direct follow-up delivery | `src/core/intake.ts`, `src/core/tickets.ts` |
 +| Durable SQLite state and queued effects | `src/app/store.ts`, `src/app/effects.ts` |
 +| An ordered message outbox with persisted receipts and retries | `src/app/outbox.ts`, `src/core/replies.ts` |
++| GitHub reply-marker reconciliation and Feishu reply idempotency keys | `src/sources/github-channel.ts`, `src/sources/feishu-channel.ts` |
 +| Assignment lifecycle checks and restart recovery | `src/core/assignments.ts`, `src/executor/dsh.ts` |
 +| Prompt resource paging and bounded summaries | `src/app/resources.ts`, `src/app/cards.ts` |
 +| Permission admission, immutable mandates and task stop behavior | `src/policy.ts`, `src/core/model.ts`, `docs/002-authorization.md` |
@@ -2805,3 +2837,215 @@ index db2bf3e..59860b1 100644
      const git = async (...args: string[]): Promise<string> => (await exec('git', args, { cwd: dir, env })).stdout.trim()
      await git('init', '-q', 'repo')
      await exec('git', ['-C', 'repo', 'remote', 'add', 'origin', 'git@github.com:acme/widgets.git'], { cwd: dir, env })
+diff --git a/tests/fixtures/outbox-crash-worker.ts b/tests/fixtures/outbox-crash-worker.ts
+new file mode 100644
+index 0000000..bc28684
+--- /dev/null
++++ b/tests/fixtures/outbox-crash-worker.ts
+@@ -0,0 +1,59 @@
++/** A real disposable process for the crash-window experiment; only CLI transport is a loopback probe. */
++import { Effects } from '../../src/app/effects.ts'
++import { Outbox } from '../../src/app/outbox.ts'
++import { Store } from '../../src/app/store.ts'
++import { Commands } from '../../src/infra/commands.ts'
++import { HealthBoard } from '../../src/infra/health.ts'
++import { SettingsSchema } from '../../src/policy.ts'
++import { sendGithub } from '../../src/sources/github-channel.ts'
++import { SourceRegistry } from '../../src/sources/registry.ts'
++import { testDeployment } from './deployment.ts'
++import { z } from 'zod'
++
++const [database, endpoint, phase, mode] = process.argv.slice(2)
++if (!database || !endpoint || !['crash', 'recover'].includes(phase ?? '') || !['github', 'naive'].includes(mode ?? '')) {
++  throw new Error('Expected database, loopback endpoint, crash|recover and github|naive')
++}
++const url = new URL(endpoint)
++if (url.hostname !== '127.0.0.1') throw new Error('The experiment must use a loopback probe')
++
++class ProbeCommands extends Commands {
++  override async run(_program: string, args: string[]): Promise<string> {
++    const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) })
++    if (!response.ok) throw new Error(`Probe failed: ${response.status}`)
++    const result = await response.text()
++    if (phase === 'crash' && args.includes('POST')) {
++      // The independent probe has committed the comment. The sender never returns to Outbox's local settle().
++      // A pending Promise alone does not keep Node alive. Hold the IPC channel until the parent kills this process.
++      process.channel?.ref()
++      process.send?.({ checkpoint: 'remote-committed' })
++      await new Promise<never>(() => {})
++    }
++    return result
++  }
++}
++
++const store = new Store(database)
++const effects = new Effects(store, new HealthBoard())
++const commands = new ProbeCommands(() => testDeployment(), {}, new AbortController().signal)
++const sources = new SourceRegistry(() => SettingsSchema.parse({ sources: { github: { enabled: true, config: {} } } }))
++sources.register({ kind: 'github', title: { zh: '探针', en: 'Probe' }, description: { zh: '', en: '' }, health: [],
++  schema: z.object({}).strict(), fields: [], channel: {
++    link: () => ({ url: '', label: { zh: '探针', en: 'Probe' } }),
++    send: async (_host, message) => {
++      if (mode === 'github') return sendGithub({ commands }, message)
++      // Deliberately non-idempotent control. The queue, SQLite, process and remote service stay the same.
++      await commands.api('issues/8/comments', '--method', 'POST', '-f', `body=${message.text}`)
++      return 'sent'
++    },
++  } })
++const outbox = new Outbox({ store, effects, commands, sources, paused: () => false })
++outbox.send({ id: 'crash-window-result', channel: { source: 'github', thread: 'github:8', address: { number: '8' } },
++  kind: 'reply', text: 'The same logical result.' })
++effects.start()
++await outbox.sent()
++const result = { status: outbox.status('crash-window-result'), pending: effects.pending('reply') }
++await effects.drain()
++store.close()
++process.stdout.write(JSON.stringify(result))
++process.disconnect?.()
+diff --git a/tests/outbox-crash.spec.ts b/tests/outbox-crash.spec.ts
+new file mode 100644
+index 0000000..d05e7cf
+--- /dev/null
++++ b/tests/outbox-crash.spec.ts
+@@ -0,0 +1,141 @@
++/** Real process death after a remote write, before its SQLite receipt; the remote GitHub protocol is simulated. */
++import { fork, type ChildProcess } from 'node:child_process'
++import { once } from 'node:events'
++import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
++import { createServer, type Server } from 'node:http'
++import { tmpdir } from 'node:os'
++import { join } from 'node:path'
++import { fileURLToPath } from 'node:url'
++import { afterAll, afterEach, expect, it } from 'vitest'
++import { Store } from '../src/app/store.ts'
++
++interface ProbeComment { id: number; body: string; user: { login: string } }
++interface Report { sender: string; markerRemoved: boolean; receiptBeforeRestart: string; effectBeforeRestart: boolean;
++  termination: { code: number | null; signal: NodeJS.Signals | null }; remoteWrites: number; remoteReads: number;
++  statusAfterRestart: string; effectAfterRestart: boolean }
++const reports: Report[] = []
++const temporary: string[] = []
++const processes = new Set<ChildProcess>()
++const servers = new Set<Server>()
++
++afterEach(async () => {
++  for (const child of processes) if (child.exitCode === null && child.signalCode === null) {
++    const ended = once(child, 'close'); child.kill('SIGKILL'); await ended
++  }
++  processes.clear()
++  for (const server of servers) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())) }
++  servers.clear()
++  for (const directory of temporary.splice(0)) rmSync(directory, { recursive: true, force: true })
++})
++afterAll(() => {
++  const path = process.env.SUPERAGENT_CRASH_REPORT
++  if (path && reports.length === 3) writeFileSync(path, `${JSON.stringify({
++    upstream: '6337fc823ce20251c8de8085948165c81aaa701e', real: ['child-process termination', 'SQLite', 'Effects', 'Outbox', 'GitHub channel adapter'],
++    simulated: ['GitHub CLI transport and remote service'], modelCalls: 0, externalPlatformWrites: 0, cases: reports,
++  }, null, 2)}\n`)
++})
++
++async function experiment(mode: 'github' | 'naive', removeMarker = false) {
++  const directory = mkdtempSync(join(tmpdir(), 'superagent-crash-')); temporary.push(directory)
++  const database = join(directory, 'state.sqlite')
++  const comments: ProbeComment[] = []
++  let writes = 0, reads = 0
++  const server = createServer(async (request, response) => {
++    try {
++      let raw = ''
++      for await (const part of request) raw += String(part)
++      const args = JSON.parse(raw) as string[]
++      if (args[0] !== 'api' || args[1] !== 'repos/acme/widgets/issues/8/comments') throw new Error('Unexpected probe command')
++      response.setHeader('content-type', 'application/json')
++      if (args.includes('POST')) {
++        const body = args.find(arg => arg.startsWith('body='))
++        if (!body) throw new Error('Missing comment body')
++        const comment = { id: ++writes, body: body.slice(5), user: { login: 'agent-bot' } }
++        comments.push(comment)
++        response.end(JSON.stringify(comment))
++      } else {
++        if (!args.includes('--paginate') || !args.includes('--slurp')) throw new Error('Expected a paginated read')
++        reads++
++        response.end(JSON.stringify([comments]))
++      }
++    } catch (error) { response.statusCode = 500; response.end(String(error)) }
++  })
++  servers.add(server)
++  server.listen(0, '127.0.0.1'); await once(server, 'listening')
++  const address = server.address()
++  if (!address || typeof address === 'string') throw new Error('Missing probe port')
++  const endpoint = `http://127.0.0.1:${address.port}`
++  const launch = (phase: 'crash' | 'recover') => {
++    const child = fork(fileURLToPath(new URL('./fixtures/outbox-crash-worker.ts', import.meta.url)), [database, endpoint, phase, mode],
++      { execArgv: ['--experimental-transform-types'], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] })
++    processes.add(child)
++    return child
++  }
++  const first = launch('crash')
++  let firstError = ''
++  first.stderr!.on('data', data => { firstError += String(data) })
++  const checkpoint = await Promise.race([
++    once(first, 'message').then(([message]) => message as { checkpoint?: string }),
++    once(first, 'exit').then(() => { throw new Error(`Worker exited before the crash point: ${firstError}`) }),
++  ])
++  expect(checkpoint).toEqual({ checkpoint: 'remote-committed' })
++  expect(writes).toBe(1)
++  expect(first.exitCode).toBeNull()
++  expect(first.signalCode).toBeNull()
++  const ended = once(first, 'close')
++  expect(first.kill('SIGKILL')).toBe(true)
++  const [exitCode, signal] = await ended as [number | null, NodeJS.Signals | null]
++  if (process.platform === 'win32') expect(exitCode !== 0 || signal === 'SIGKILL').toBe(true)
++  else expect({ exitCode, signal }).toEqual({ exitCode: null, signal: 'SIGKILL' })
++  const before = new Store(database)
++  let receipt: string | undefined, pending: boolean
++  try {
++    receipt = before.receipts.get('crash-window-result')?.status
++    pending = !!before.db.prepare("SELECT 1 FROM effect WHERE kind = 'reply'").get()
++  } finally { before.close() }
++  expect({ receipt, pending }).toEqual({ receipt: 'pending', pending: true })
++  if (removeMarker) {
++    const marker = '<!-- dsh-superagent:crash-window-result -->'
++    expect(comments[0]!.body).toContain(marker)
++    comments[0]!.body = comments[0]!.body.replace(marker, '')
++    expect(comments[0]!.body).toContain('The same logical result.')
++  }
++
++  const second = launch('recover')
++  let output = '', error = ''
++  second.stdout!.on('data', data => { output += String(data) })
++  second.stderr!.on('data', data => { error += String(data) })
++  const [code] = await once(second, 'close')
++  expect(code, error).toBe(0)
++  const result = JSON.parse(output) as { status: string; pending: boolean }
++  expect(result).toEqual({ status: 'sent', pending: false })
++  // Reopen independently: a successful IPC/stdout report is not enough to prove a durable local receipt.
++  const after = new Store(database)
++  try {
++    expect(after.receipts.get('crash-window-result')?.status).toBe('sent')
++    expect(after.db.prepare("SELECT COUNT(*) AS count FROM effect WHERE kind = 'reply'").get()?.count).toBe(0)
++  } finally { after.close() }
++  reports.push({ sender: mode, markerRemoved: removeMarker, receiptBeforeRestart: receipt!, effectBeforeRestart: pending,
++    termination: { code: exitCode, signal }, remoteWrites: writes, remoteReads: reads,
++    statusAfterRestart: result.status, effectAfterRestart: result.pending })
++  return { writes, reads, comments }
++}
++
++it('reconciles the committed comment after a real process death instead of posting it again', async () => {
++  const result = await experiment('github')
++  expect(result.writes).toBe(1)
++  expect(result.reads).toBe(2)
++  expect(result.comments[0]!.body).toContain('<!-- dsh-superagent:crash-window-result -->')
++}, 20_000)
++
++it('shows that the same durable queue duplicates a write when its sender has no reconciliation', async () => {
++  const result = await experiment('naive')
++  expect(result.writes).toBe(2)
++  expect(result.reads).toBe(0)
++}, 20_000)
++
++it('shows the GitHub marker assumption by removing it before the restarted sender reconciles', async () => {
++  const result = await experiment('github', true)
++  expect(result.writes).toBe(2)
++  expect(result.reads).toBe(2)
++}, 20_000)
