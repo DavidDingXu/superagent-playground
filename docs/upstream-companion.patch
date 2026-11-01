@@ -2551,7 +2551,7 @@ HcmV?d00001
 
 diff --git a/docs/reliability-proposal.md b/docs/reliability-proposal.md
 new file mode 100644
-index 0000000..bcc1f9f
+index 0000000..0c3e177
 --- /dev/null
 +++ b/docs/reliability-proposal.md
 @@ -0,0 +1,136 @@
@@ -2622,7 +2622,7 @@ index 0000000..bcc1f9f
 +}
 +```
 +
-+These are proposed fields, not the current upstream API. Check results must be tied to the exact artifact digest and repository revision; the existence of a successful earlier test is insufficient.
++These are proposed fields, not the current upstream API. Check results must be tied to the exact artifact digest and repository revision; the existence of a successful earlier test is insufficient. The trusted host or a constrained verification runner must compute the digest and record check provenance. The gateway must not treat a worker's self-reported exit code as trusted verification.
 +
 +Ordinary comments do not silently grant authority or necessarily change the intent. Policy distinguishes an authorized amendment from untrusted context. Conflicting maintainer requests remain a product decision; versioning records a resolved decision rather than resolving that conflict by itself.
 +
